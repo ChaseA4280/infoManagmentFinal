@@ -16,7 +16,7 @@ def generate_mock_reviews():
     # Connect to MongoDB
     mongo_client = MongoClient(MONGO_CONFIG['connection_string'])
     mongo_db = mongo_client[MONGO_CONFIG['database']]
-    reviews_collection = mongo_db[MONGO_CONFIG['collection']]
+    reviews_collection = mongo_db[MONGO_CONFIG['collections']['product_reviews']]
     
     # Clear existing reviews
     reviews_collection.delete_many({})
