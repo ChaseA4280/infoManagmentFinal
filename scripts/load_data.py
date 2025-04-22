@@ -94,10 +94,24 @@ def load_csv_data(csv_file):
         order_data = []
         for _, row in unique_orders.iterrows():
             customer_key = (row['Customer Name'], row['Customer Location'])
+            
+            # Convert date to PostgreSQL format (YYYY-MM-DD)
+            date_str = row['Date']
+            try:
+                # Parse the date assuming DD-MM-YY format
+                date_parts = date_str.split('-')
+                if len(date_parts) == 3 and len(date_parts[2]) == 2:
+                    # Expand YY to YYYY (assume 20YY)
+                    formatted_date = f"20{date_parts[2]}-{date_parts[1]}-{date_parts[0]}"
+                else:
+                    formatted_date = date_str  # Keep as is if not in expected format
+            except Exception:
+                formatted_date = date_str  # Keep as is if parsing fails
+            
             order_data.append((
                 row['Order ID'],
                 customer_map[customer_key],
-                row['Date'],
+                formatted_date,  # Use the formatted date
                 payment_method_map[row['Payment Method']],
                 row['Status']
             ))
@@ -144,5 +158,5 @@ def load_csv_data(csv_file):
         conn.close()
 
 if __name__ == "__main__":
-    csv_file = "amazon_sales_data 2025.csv"
+    csv_file = "C:/Users/adamc/Documents/GitHub/Course_Catalog/infoManagmentFinal/data/amazon_sales_data 2025.csv"
     load_csv_data(csv_file)
