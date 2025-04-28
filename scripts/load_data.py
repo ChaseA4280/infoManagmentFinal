@@ -158,5 +158,6 @@ def load_csv_data(csv_file):
         conn.close()
 
 if __name__ == "__main__":
-    csv_file = "C:/Users/adamc/Documents/GitHub/Course_Catalog/infoManagmentFinal/data/amazon_sales_data 2025.csv"
+    # you will need to change this to match the exact path for your computer
+    csv_file = "C:/Users/Abi/Documents/GitHub/infoManagmentFinal/data/amazon_sales_data 2025.csv"
     load_csv_data(csv_file)
