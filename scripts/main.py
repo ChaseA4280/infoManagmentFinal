@@ -139,25 +139,21 @@ def main():
                 print(f"Error getting product reviews: {str(e)}")
         
         elif choice == "7":
-            # Get Sales Metrics
-            days = input("Enter number of days for analysis (default: 30): ") or 30
+            # Get Sales Metrics for a specific date
+            date = input("Enter the date for analysis (format: YYYY-MM-DD): ")
             
             try:
-                result = get_sales_metrics(int(days))
+                result = get_sales_metrics(date)  # Pass the specific date to the function
                 if "error" in result:
                     print(f"Error: {result['error']}")
                 else:
-                    print(f"\nSales Metrics for the {result['period']}:")
-                    print(f"Average Daily Sales: ${result['averages']['avg_daily_sales']:.2f}")
-                    print(f"Average Orders per Day: {result['averages']['avg_order_count']:.1f}")
-                    print(f"Average Items Sold per Day: {result['averages']['avg_items_sold']:.1f}")
-                    
-                    print("\nDaily Breakdown:")
-                    for day in result['daily_data']:
-                        print(f"{day['date']}: ${day['sales']:.2f} ({day['orders']} orders, {day['items_sold']} items)")
+                    print(f"\nSales Metrics for {date}:")
+                    print(f"Total Sales: ${result['total_sales']:.2f}")
+                    print(f"Total Orders: {result['order_count']}")
+                    print(f"Total Items Sold: {result['items_sold']}")
             except Exception as e:
                 print(f"Error getting sales metrics: {str(e)}")
-        
+                
         elif choice == "8":
             # Get Customer Purchase History
             customer_name = input("Enter Customer Name: ")

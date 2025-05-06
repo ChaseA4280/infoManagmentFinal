@@ -4,7 +4,7 @@ import pandas as pd
 from pymongo import MongoClient
 from influxdb_client import InfluxDBClient
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 # Connection parameters
 PG_CONN_PARAMS = {
@@ -354,26 +354,24 @@ def get_product_reviews(product_name):
         pg_conn.close()
 
 # Function 5: Get sales metrics over time (PostgreSQL + InfluxDB)
-def get_sales_metrics(days=30):
+def get_sales_metrics(date):
     """
-    Function 5: Get sales metrics over time from PostgreSQL and store in InfluxDB.
-    This function demonstrates the use of a time-series database.
+    Function 5: Get sales metrics for a specific date from PostgreSQL and store in InfluxDB.
     
     Args:
-        days (int): Number of past days to analyze
+        date (str): The specific date to analyze (format: YYYY-MM-DD)
         
     Returns:
-        dict: Sales metrics
+        dict: Sales metrics for the given date
     """
     # Get sales data from PostgreSQL
     pg_conn = get_pg_connection()
     pg_cursor = pg_conn.cursor()
     
     try:
-        # Query for daily sales
+        # Query for sales on the specific date
         pg_cursor.execute("""
             SELECT 
-                o.order_date,
                 SUM(oi.total) as daily_sales,
                 COUNT(DISTINCT o.order_id) as order_count,
                 SUM(oi.quantity) as items_sold
@@ -381,86 +379,42 @@ def get_sales_metrics(days=30):
                 orders o
                 JOIN order_items oi ON o.order_id = oi.order_id
             WHERE 
-                o.order_date >= CURRENT_DATE - INTERVAL %s DAY
-            GROUP BY 
-                o.order_date
-            ORDER BY 
-                o.order_date
-        """, (days,))
+                o.order_date = %s
+        """, (date,))
         
-        daily_sales = pg_cursor.fetchall()
+        sales_data = pg_cursor.fetchone()
+        
+        if not sales_data or sales_data[0] is None:
+            return {"error": f"No sales data found for {date}"}
+        
+        daily_sales, order_count, items_sold = sales_data
         
         # Store this data in InfluxDB
         influx_client = get_influx_connection()
         write_api = influx_client.write_api()
         
-        points = []
-        for day in daily_sales:
-            order_date, sales, order_count, items_sold = day
-            
-            point = {
-                "measurement": "daily_sales",
-                "tags": {
-                    "metric_type": "sales_summary"
-                },
-                "fields": {
-                    "daily_sales": float(sales),
-                    "order_count": order_count,
-                    "items_sold": items_sold
-                },
-                "time": order_date.isoformat() + "Z"
-            }
-            points.append(point)
-        
-        # Write to InfluxDB
-        if points:
-            write_api.write(bucket=INFLUX_BUCKET, record=points)
-        
-        # Query InfluxDB for aggregated metrics
-        query_api = influx_client.query_api()
-        
-        # Define the Flux query
-        flux_query = f'''
-        from(bucket: "{INFLUX_BUCKET}")
-            |> range(start: -{days}d)
-            |> filter(fn: (r) => r._measurement == "daily_sales")
-            |> group(columns: ["_field"])
-            |> mean()
-        '''
-        
-        # Execute the query
-        result = query_api.query(query=flux_query)
-        
-        # Process the results
-        metrics = {
-            "avg_daily_sales": 0,
-            "avg_order_count": 0,
-            "avg_items_sold": 0
+        point = {
+            "measurement": "daily_sales",
+            "tags": {
+                "metric_type": "sales_summary"
+            },
+            "fields": {
+                "daily_sales": float(daily_sales),
+                "order_count": order_count,
+                "items_sold": items_sold
+            },
+            "time": date
         }
         
-        for table in result:
-            for record in table.records:
-                if record.get_field() == "daily_sales":
-                    metrics["avg_daily_sales"] = round(record.get_value(), 2)
-                elif record.get_field() == "order_count":
-                    metrics["avg_order_count"] = round(record.get_value(), 2)
-                elif record.get_field() == "items_sold":
-                    metrics["avg_items_sold"] = round(record.get_value(), 2)
+        # Write to InfluxDB
+        write_api.write(bucket=INFLUX_BUCKET, record=point)
         
-        # Format the daily data for return
-        daily_data = []
-        for day in daily_sales:
-            daily_data.append({
-                "date": day[0].strftime("%Y-%m-%d"),
-                "sales": float(day[1]),
-                "orders": day[2],
-                "items_sold": day[3]
-            })
-        
+        # Return the sales metrics
         return {
-            "period": f"Last {days} days",
-            "averages": metrics,
-            "daily_data": daily_data
+            "date": date,
+            "total_sales": float(daily_sales),
+            "order_count": order_count,
+            "items_sold": items_sold
         }
     
     except Exception as e:
