@@ -22,7 +22,7 @@ def run_demo():
     print("-" * 50)
     
     # Replace with an actual order ID from your database
-    order_id = "ORD12345"
+    order_id = "ORD0002"
     print(f"Getting details for Order ID: {order_id}")
     result = get_order_details(order_id)
     print(json.dumps(result, indent=2))
@@ -39,8 +39,8 @@ def run_demo():
     print("-" * 50)
     
     # Replace with actual product and customer from your database
-    product_name = "Wireless Headphones"
-    customer_name = "Jane Smith"
+    product_name = "Headphones"
+    customer_name = "Emily Johnson"
     
     print(f"Adding review for {product_name} by {customer_name}")
     result = add_product_review(

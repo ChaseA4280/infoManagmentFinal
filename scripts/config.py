@@ -12,7 +12,11 @@ PG_CONFIG = {
 MONGO_CONFIG = {
     'connection_string': 'mongodb://localhost:27017/',
     'database': 'ecommerce',
-    'collection': 'product_reviews'
+    'collections': {
+        'product_reviews': 'product_reviews',
+        'product_details': 'product_details',
+        'user_profiles': 'user_profiles'
+    }
 }
 
 # InfluxDB connection parameters

@@ -1,7 +1,9 @@
 # db_operations.py
 import psycopg2
+from psycopg2 import extras
 import pandas as pd
 from pymongo import MongoClient
+from mongo_operations import *
 from influxdb_client import InfluxDBClient
 import json
 from datetime import datetime, date
@@ -231,7 +233,7 @@ def add_product_review(product_name, customer_name, rating, review_text):
         
         # Connect to MongoDB and add the review
         mongo_db = get_mongo_connection()
-        reviews_collection = mongo_db[MONGO_COLLECTION]
+        reviews_collection = mongo_db[MONGO_CONFIG['collections']['product_reviews']]
         
         review_doc = {
             "product_id": product_id,
@@ -315,7 +317,7 @@ def get_product_reviews(product_name):
         
         # Get reviews from MongoDB
         mongo_db = get_mongo_connection()
-        reviews_collection = mongo_db[MONGO_COLLECTION]
+        reviews_collection = mongo_db[MONGO_CONFIG['collections']['product_reviews']]
         
         reviews = list(reviews_collection.find({"product_id": product_id}))
         
@@ -432,7 +434,7 @@ def get_customer_purchase_history(customer_name):
     Args:
         customer_name (str): The name of the customer
         
-    Returns:
+    Returns: 
         dict: Customer's order history
     """
     conn = get_pg_connection()
@@ -565,6 +567,35 @@ def get_customer_purchase_history(customer_name):
     finally:
         cursor.close()
         conn.close()
+
+# New function to demonstrate MongoDB integration
+def enrich_product_data(product_id, description, features, images):
+    """
+    Function to store rich product data in MongoDB
+    """
+    try:
+        # First get basic product info from PostgreSQL
+        pg_conn = get_pg_connection()
+        pg_cursor = pg_conn.cursor()
+        
+        pg_cursor.execute("""
+            SELECT name FROM products WHERE product_id = %s
+        """, (product_id,))
+        
+        result = pg_cursor.fetchone()
+        if not result:
+            return {"error": "Product not found"}
+        
+        product_name = result[0]
+        
+        # Store rich data in MongoDB
+        store_product_details(product_id, product_name, description, features, images)
+        
+        return {"status": "success", "message": "Product data enriched successfully"}
+        
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
 
 # Main function to test all operations
 def main():
