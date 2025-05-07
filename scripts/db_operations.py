@@ -355,76 +355,114 @@ def get_product_reviews(product_name):
         pg_cursor.close()
         pg_conn.close()
 
-# Function 5: Get sales metrics over time (PostgreSQL + InfluxDB)
-def get_sales_metrics(date):
-    """
-    Function 5: Get sales metrics for a specific date from PostgreSQL and store in InfluxDB.
+# Function 5: Get sales metrics over time (InfluxDB)
+def get_sales_metrics(days=1):
+    from datetime import datetime, timedelta
+    from influxdb_client import InfluxDBClient
     
-    Args:
-        date (str): The specific date to analyze (format: YYYY-MM-DD)
-        
-    Returns:
-        dict: Sales metrics for the given date
-    """
-    # Get sales data from PostgreSQL
-    pg_conn = get_pg_connection()
-    pg_cursor = pg_conn.cursor()
+    INFLUX_URL = "http://localhost:8086"
+    INFLUX_TOKEN = "my-token"
+    INFLUX_ORG = "my-org"
+    INFLUX_BUCKET = "ecommerce_metrics"
+    
+    # Calculate date range
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
     
     try:
-        # Query for sales on the specific date
-        pg_cursor.execute("""
-            SELECT 
-                SUM(oi.total) as daily_sales,
-                COUNT(DISTINCT o.order_id) as order_count,
-                SUM(oi.quantity) as items_sold
-            FROM 
-                orders o
-                JOIN order_items oi ON o.order_id = oi.order_id
-            WHERE 
-                o.order_date = %s
-        """, (date,))
+        # Initialize InfluxDB client
+        client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+        query_api = client.query_api()
         
-        sales_data = pg_cursor.fetchone()
+        # Build the Flux query
+        flux_query = f'''
+        from(bucket: "{INFLUX_BUCKET}")
+            |> range(start: {start_date.strftime("%Y-%m-%dT00:00:00Z")}, stop: {end_date.strftime("%Y-%m-%dT23:59:59Z")})
+            |> filter(fn: (r) => r._measurement == "orders")
+        '''
+
+        # Execute query to get the raw data
+        tables = query_api.query(flux_query)
         
-        if not sales_data or sales_data[0] is None:
-            return {"error": f"No sales data found for {date}"}
+        # Process results
+        daily_data = {}
         
-        daily_sales, order_count, items_sold = sales_data
+        for table in tables:
+            for record in table.records:
+                # Extract the date part only
+                date_obj = record.get_time().date()
+                date_str = date_obj.isoformat()
+                
+                # Initialize the day's data if not already present
+                if date_str not in daily_data:
+                    daily_data[date_str] = {
+                        "total_sales": 0.0,
+                        "order_count": 0,
+                        "items_sold": 0
+                    }
+                
+                # Get values from the record
+                field_name = record.get_field()
+                value = record.get_value()
+                
+                if field_name == "total_sales":
+                    daily_data[date_str]["total_sales"] += float(value or 0)
+                elif field_name == "quantity":
+                    daily_data[date_str]["items_sold"] += int(value or 0)
+                
+                # Increment order count
+                daily_data[date_str]["order_count"] += 1
         
-        # Store this data in InfluxDB
-        influx_client = get_influx_connection()
-        write_api = influx_client.write_api()
+        # Prepare the final result
+        daily_results = []
+        total_sales = 0
+        total_orders = 0
+        total_items = 0
         
-        point = {
-            "measurement": "daily_sales",
-            "tags": {
-                "metric_type": "sales_summary"
-            },
-            "fields": {
-                "daily_sales": float(daily_sales),
-                "order_count": order_count,
-                "items_sold": items_sold
-            },
-            "time": date
-        }
+        for date_str, metrics in daily_data.items():
+            daily_results.append({
+                "date": date_str,
+                "total_sales": metrics["total_sales"],
+                "order_count": metrics["order_count"],
+                "items_sold": metrics["items_sold"]
+            })
+            
+            # Sum totals for all dates
+            total_sales += metrics["total_sales"]
+            total_orders += metrics["order_count"]
+            total_items += metrics["items_sold"]
         
-        # Write to InfluxDB
-        write_api.write(bucket=INFLUX_BUCKET, record=point)
+        # Sort results by date
+        daily_results.sort(key=lambda x: x["date"])
         
-        # Return the sales metrics
+        # If no data found
+        if not daily_results:
+            return {
+                "error": f"No sales data found for the last {days} days"
+            }
+        
         return {
-            "date": date,
-            "total_sales": float(daily_sales),
-            "order_count": order_count,
-            "items_sold": items_sold
+            "period": {
+                "start_date": str(start_date),
+                "end_date": str(end_date),
+                "days": days
+            },
+            "totals": {
+                "total_sales": total_sales,
+                "total_orders": total_orders,
+                "total_items": total_items,
+                "avg_daily_sales": total_sales / len(daily_results) if daily_results else 0,
+                "avg_order_value": total_sales / total_orders if total_orders > 0 else 0
+            },
+            "daily_breakdown": daily_results
         }
     
     except Exception as e:
         return {"error": str(e)}
     
     finally:
-        pg_cursor.close()
-        pg_conn.close()
+        if 'client' in locals():
+            client.close()
 
 # Function 6: Get customer purchase history (PostgreSQL)
 def get_customer_purchase_history(customer_name):

@@ -1,4 +1,5 @@
 # main.py
+import json
 import os
 import sys
 from schema import create_schema
@@ -139,18 +140,20 @@ def main():
                 print(f"Error getting product reviews: {str(e)}")
         
         elif choice == "7":
-            # Get Sales Metrics for a specific date
-            date = input("Enter the date for analysis (format: YYYY-MM-DD): ")
+            # Get Sales Metrics for the last x days
+            days = int(input("Enter how many days back to get sales metrics (default: 30): ")) or 30
             
             try:
-                result = get_sales_metrics(date)  # Pass the specific date to the function
+                result = get_sales_metrics(days)
                 if "error" in result:
                     print(f"Error: {result['error']}")
                 else:
-                    print(f"\nSales Metrics for {date}:")
-                    print(f"Total Sales: ${result['total_sales']:.2f}")
-                    print(f"Total Orders: {result['order_count']}")
-                    print(f"Total Items Sold: {result['items_sold']}")
+                    print(f"\nSales Metrics from {result['period']['start_date']} to {result['period']['end_date']} ({result['period']['days']} days):")
+                    print(f"Total Sales: ${result['totals']['total_sales']:.2f}")
+                    print(f"Total Orders: {result['totals']['total_orders']}")
+                    print(f"Total Items Sold: {result['totals']['total_items']}")
+                    print(f"Average Daily Sales: ${result['totals']['avg_daily_sales']:.2f}")
+                    print(f"Average Order Value: ${result['totals']['avg_order_value']:.2f}")
             except Exception as e:
                 print(f"Error getting sales metrics: {str(e)}")
                 

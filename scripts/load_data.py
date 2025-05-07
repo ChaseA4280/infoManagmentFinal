@@ -4,6 +4,8 @@ import psycopg2
 import os
 from psycopg2.extras import execute_batch
 
+import influxdb_operations as influx
+
 def load_csv_data(csv_file):
     """
     Load data from the e-commerce CSV file into PostgreSQL tables.
@@ -156,6 +158,9 @@ def load_csv_data(csv_file):
     finally:
         cursor.close()
         conn.close()
+
+    #Load data into InfluxDB
+    influx.csv_to_influxdb(csv_file)
 
 if __name__ == "__main__":
     csv_file = "C:/Users/kenzi/Documents/GitHub/infoManagmentFinal/data/amazon_sales_data 2025.csv"
