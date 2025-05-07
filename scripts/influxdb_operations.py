@@ -66,6 +66,7 @@ def csv_to_influxdb(csv_path):
                     .field("price", float(row['Price'])) \
                     .field("quantity", int(row['Quantity'])) \
                     .field("total_sales", float(row['Total Sales'])) \
+                    .field("customer_name", row['Customer Name']) \
                     .time(date_str)
                 
                 records.append(point)

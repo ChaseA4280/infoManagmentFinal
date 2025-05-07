@@ -1,4 +1,5 @@
 # db_operations.py
+import warnings
 import psycopg2
 from psycopg2 import extras
 import pandas as pd
@@ -7,6 +8,7 @@ from mongo_operations import *
 from influxdb_client import InfluxDBClient
 import json
 from datetime import datetime, date
+from influxdb_client.client.warnings import MissingPivotFunction
 
 # Connection parameters
 PG_CONN_PARAMS = {
@@ -465,146 +467,42 @@ def get_sales_metrics(days=1):
             client.close()
 
 # Function 6: Get customer purchase history (PostgreSQL)
-def get_customer_purchase_history(customer_name):
-    """
-    Function 6: Get a customer's complete purchase history from PostgreSQL
-    
-    Args:
-        customer_name (str): The name of the customer
-        
-    Returns: 
-        dict: Customer's order history
-    """
-    conn = get_pg_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Get customer ID
-        cursor.execute("""
-            SELECT customer_id, name, location 
-            FROM customers 
-            WHERE name = %s
-        """, (customer_name,))
-        
-        customer = cursor.fetchone()
-        
-        if not customer:
-            return {"error": f"Customer {customer_name} not found"}
-        
-        customer_id, name, location = customer
-        
-        # Get all orders for this customer
-        cursor.execute("""
-            SELECT 
-                o.order_id, 
-                o.order_date, 
-                o.status,
-                pm.name AS payment_method,
-                SUM(oi.total) AS order_total
-            FROM 
-                orders o
-                JOIN payment_methods pm ON o.payment_method_id = pm.payment_method_id
-                JOIN order_items oi ON o.order_id = oi.order_id
-            WHERE 
-                o.customer_id = %s
-            GROUP BY 
-                o.order_id, o.order_date, o.status, pm.name
-            ORDER BY 
-                o.order_date DESC
-        """, (customer_id,))
-        
-        orders = cursor.fetchall()
-        
-        # Format for return
-        formatted_orders = []
-        total_spent = 0
-        
-        for order in orders:
-            order_id, order_date, status, payment_method, order_total = order
-            
-            # Get order items
-            cursor.execute("""
-                SELECT 
-                    p.name AS product_name,
-                    pc.name AS category,
-                    oi.quantity,
-                    oi.price,
-                    oi.total
-                FROM 
-                    order_items oi
-                    JOIN products p ON oi.product_id = p.product_id
-                    JOIN product_categories pc ON p.category_id = pc.category_id
-                WHERE 
-                    oi.order_id = %s
-            """, (order_id,))
-            
-            items = cursor.fetchall()
-            formatted_items = []
-            
-            for item in items:
-                formatted_items.append({
-                    "product": item[0],
-                    "category": item[1],
-                    "quantity": item[2],
-                    "price": float(item[3]),
-                    "total": float(item[4])
-                })
-            
-            formatted_orders.append({
-                "order_id": order_id,
-                "date": order_date.strftime("%Y-%m-%d"),
-                "status": status,
-                "payment_method": payment_method,
-                "total": float(order_total),
-                "items": formatted_items
-            })
-            
-            total_spent += float(order_total)
-        
-        # Get customer's favorite categories
-        cursor.execute("""
-            SELECT 
-                pc.name AS category,
-                COUNT(*) AS purchase_count,
-                SUM(oi.total) AS total_spent
-            FROM 
-                orders o
-                JOIN order_items oi ON o.order_id = oi.order_id
-                JOIN products p ON oi.product_id = p.product_id
-                JOIN product_categories pc ON p.category_id = pc.category_id
-            WHERE 
-                o.customer_id = %s
-            GROUP BY 
-                pc.name
-            ORDER BY 
-                purchase_count DESC
-        """, (customer_id,))
-        
-        categories = cursor.fetchall()
-        favorite_categories = []
-        
-        for category in categories:
-            favorite_categories.append({
-                "category": category[0],
-                "purchase_count": category[1],
-                "total_spent": float(category[2])
-            })
-        
-        return {
-            "customer": {
-                "id": customer_id,
-                "name": name,
-                "location": location
-            },
-            "order_count": len(orders),
-            "total_spent": total_spent,
-            "favorite_categories": favorite_categories,
-            "orders": formatted_orders
-        }
-    
-    finally:
-        cursor.close()
-        conn.close()
+def get_customer_purchase_history(customer_name, days=365):
+    INFLUX_URL = "http://localhost:8086"
+    INFLUX_TOKEN = "my-token"
+    INFLUX_ORG = "my-org"
+    INFLUX_BUCKET = "ecommerce_metrics"
+
+    # Stop InfluxDB warnings
+    warnings.simplefilter("ignore", MissingPivotFunction)
+
+    start_range = f"-{days}d"
+
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: {start_range})
+      |> filter(fn: (r) => r._measurement == "orders" and r._field == "customer_name")
+      |> yield(name: "customer_names")
+    '''
+
+    with InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG) as client:
+        query_api = client.query_api()
+        tables = query_api.query_data_frame(query=query)
+
+    if isinstance(tables, list):
+        df = pd.concat(tables)
+    else:
+        df = tables
+
+    if df.empty:
+        return pd.DataFrame(columns=["date", "order_count"])
+
+    df.rename(columns={"_value": "customer_name", "_time": "time"}, inplace=True)
+    df = df[df['customer_name'] == customer_name]
+    df['date'] = pd.to_datetime(df['time']).dt.date
+    result = df.groupby('date').size().reset_index(name='order_count')
+
+    return result
 
 # New function to demonstrate MongoDB integration
 def enrich_product_data(product_id, description, features, images):

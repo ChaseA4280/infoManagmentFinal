@@ -160,30 +160,13 @@ def main():
         elif choice == "8":
             # Get Customer Purchase History
             customer_name = input("Enter Customer Name: ")
-            
+            days = int(input("Enter number of days (default 365): ")) or 365
             try:
-                result = get_customer_purchase_history(customer_name)
+                result = get_customer_purchase_history(customer_name, days)
                 if "error" in result:
                     print(f"Error: {result['error']}")
                 else:
-                    customer = result['customer']
-                    print(f"\nCustomer: {customer['name']} ({customer['location']})")
-                    print(f"Total Orders: {result['order_count']}")
-                    print(f"Total Spent: ${result['total_spent']:.2f}")
-                    
-                    print("\nFavorite Categories:")
-                    for i, category in enumerate(result['favorite_categories'][:3], 1):
-                        print(f"{i}. {category['category']} - {category['purchase_count']} purchases (${category['total_spent']:.2f})")
-                    
-                    print("\nOrder History:")
-                    for order in result['orders']:
-                        print(f"\nOrder {order['order_id']} ({order['date']}) - {order['status']}")
-                        print(f"Payment Method: {order['payment_method']}")
-                        print(f"Total: ${order['total']:.2f}")
-                        
-                        print("Items:")
-                        for item in order['items']:
-                            print(f"- {item['product']} (${item['price']:.2f} x {item['quantity']} = ${item['total']:.2f})")
+                    print(result)
             except Exception as e:
                 print(f"Error getting customer history: {str(e)}")
         
